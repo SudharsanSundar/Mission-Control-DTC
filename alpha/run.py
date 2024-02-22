@@ -8,7 +8,7 @@ gpt_model = GPT(model="gpt-3.5-turbo")
 
 file_path = 'livingston.txt'
 
-print("Start")
+print("Hello")
 
 # Loading in the Corpus
 with open(file_path, 'r') as file:
@@ -43,8 +43,9 @@ for chunk in chunks:
         sliding_window.notepad = relevant_info
         is_notepad_empty = False
         continue
-    #if 'ignore chunk' in relevant_info.choices[0].message.lower():
-        #continue
+    if 'ignore chunk' in relevant_info.choices[0].message.content.lower():
+        print(f'This is the chunk I want to ignore {relevant_info.choices[0].message.content.lower()}')
+        continue
     
     # synthesize the new relevant info and the notepad and use that to update running_notepad
     notepad = sliding_window.synthesis(relevant_info)
