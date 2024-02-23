@@ -1,8 +1,7 @@
 numpy
 pandas
 matplotlib
-re
-json
 tiktoken
-sentence_transformers
+sentence-transformers
 openai
+faiss-cc
