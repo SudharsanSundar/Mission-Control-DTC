@@ -59,7 +59,12 @@ class Corpus:
     - chunk_size: token size of chunks for chunking process of corpus text
     - (optional) embed: whether to embed the chunks of the corpus
     """
-    def __init__(self, name: str, text_file: str, chunk_size: int, embed=False):
+    def __init__(self, name: str, chunk_size: int, text=None, text_file=None, embed=False):
+        if not text_file and not text:
+            raise Exception('Please initialize a corpus by passing in a text file path or the text itself.')
+        elif text_file and text:
+            raise Exception('Please initialize a corpus by passing ONE of a text file path or the text itself.')
+
         self.name = name
         with open(text_file, "r") as f:
             self.text = f.read()
@@ -80,7 +85,7 @@ class Corpus:
 Object to deal with experimental sliding window + scratchpad architecture.
 """
 class MetaRNN:
-    def __init__(self, query: str, model: GPT):
+    def __init__(self, model: GPT, query=''):
         """
         Init the MetaRNN with a corpus and a query.
 

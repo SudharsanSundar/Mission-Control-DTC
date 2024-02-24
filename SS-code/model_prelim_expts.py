@@ -82,7 +82,7 @@ def main():
 
     # # # Get final notes
     print('-' * 80)
-    final_notes, note_states = qa_model.get_notes_from_corpus(corpus)
+    final_note, note_states = qa_model.get_notes_from_corpus(corpus)
 
     # # # Answer query
     final_answer = qa_model.final_answer()
