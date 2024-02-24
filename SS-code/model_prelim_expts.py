@@ -4,101 +4,63 @@ from embedding_utils import FaissIndex, OpenAIEmbeddingModel, cosine_similarity
 CHUNK_SIZE200 = 200
 
 
+"""
+Print utility
+"""
 def print_list(data: list) -> None:
     for line in data:
         print(line)
 
 
-# TODO: Experiments currently inefficient: reembed chunks and states every time. fix later
-
-
 """
-Compares the similarity of (query and chunk) to similarity of (query and relevant info extract from chunk).
-Proof positive is that the latter is greater than the former (by a lot).
+Gets the cosine similarity of (query and chunk i), (query and relevant info extract from chunk i), (query, note state i after synthesizing info)
+Proof positive is that the last two are greater than the first, and that the last one grows over time/in proportion to the second
 
 :params
-- query: original query to answer
-- chunks: text chunks from corpus
-- note_states: all (intermediate) note states produced by the model, which includes the relevant info extract from each chunk
+- query_embd: original query to answer, embedding
+- note_state_embds: list of dicts with each dict containing 
+    {
+    'chunk': chunk embedding,
+    'relevant_info_extracted': extract embedding,
+    'synthed_note_state: note state embedding
+    }
 
 :returns
-- similarities: list with elements of the following format
-    [s1 = similarity(query, chunk_i), s2 = similarity(query, extracted_info_i), s2 - s1]
+- query_to_chunk: cos sim from query to each chunk
+- query_to_extract: cos sim from query to each extract
+- query_to_note: cos sim from query to each note state
 """
-def cos_sim_query_to_extract_vs_chunk(query: str, chunks: list, note_states: list) -> list:
+def cos_sim_query_to_chunk_extract_note(query_embd, note_state_embds: list) -> (list, list, list):
+    query_to_chunk = []
+    query_to_extract = []
+    query_to_note = []
+
+    for note_state in note_state_embds:
+        chunk_sim = cosine_similarity(query_embd, note_state['chunk'])
+        extract_sim = cosine_similarity(query_embd, note_state['relevant_info_extracted'])
+        note_sim = cosine_similarity(query_embd, note_state['synthed_note_state'])
+
+        query_to_chunk.append(chunk_sim)
+        query_to_extract.append(extract_sim)
+        query_to_note.append(note_sim)
+
+    return query_to_chunk, query_to_extract, query_to_note
+
+
+"""
+Embeds all info in the note_states return object from calling .get_notes_from_corpus()
+"""
+def create_note_state_dict_embeddings(note_states: list) -> list:
+    note_state_embds = []
     embedding_model = OpenAIEmbeddingModel()
-    query_embd = embedding_model.create_embedding(query)
-    similarities = []
 
-    for chunk, note_state in zip(chunks, note_states):
-        chunk_embd = embedding_model.create_embedding(chunk)
-        extract_embd = embedding_model.create_embedding(note_state['relevant_info_extracted'])
+    for item in note_states:
+        note_state_embds.append({'chunk': embedding_model.create_embedding(item['chunk']),
+                                 'relevant_info_extracted': embedding_model.create_embedding(item['relevant_info_extracted']),
+                                 'synthed_note_state': embedding_model.create_embedding(item['synthed_note_state'])
+        })
 
-        chunk_sim = cosine_similarity(query_embd, chunk_embd)
-        extract_sim = cosine_similarity(query_embd, extract_embd)
-
-        similarities.append([chunk_sim, extract_sim, extract_sim - chunk_sim])
-
-    return similarities
-
-
-"""
-Compares the similarity of (query and chunk i) to similarity of (query and synthesized note i).
-Proof positive is that the latter is greater than the former (by a lot).
-
-:params
-- query: original query to answer
-- chunks: text chunks from corpus
-- note_states: all (intermediate) note states produced by the model, which includes the note state at each chunk
-
-:returns
-- similarities: list with elements of the following format
-    [s1 = similarity(query, chunk_i), s2 = similarity(query, note_state_i), s2 - s1]
-"""
-def cos_sim_query_to_note_vs_chunk(query: str, chunks: list, note_states: list) -> list:
-    embedding_model = OpenAIEmbeddingModel()
-    query_embd = embedding_model.create_embedding(query)
-    similarities = []
-
-    for chunk, note_state in zip(chunks, note_states):
-        chunk_embd = embedding_model.create_embedding(chunk)
-        note_embd = embedding_model.create_embedding(note_state['synthed_note_state'])
-
-        chunk_sim = cosine_similarity(query_embd, chunk_embd)
-        note_sim = cosine_similarity(query_embd, note_embd)
-
-        similarities.append([chunk_sim, note_sim, note_sim - chunk_sim])
-
-    return similarities
-
-
-"""
-Shows the similarity of (query and note state i) and similarity of (query and relevant info extract) over time.
-Proof positive is that the former increases over time, generally in proportion to the latter.
-
-:params
-- query: original query to answer
-- note_states: all (intermediate) note states produced by the model, which includes the note state and info extracted at each chunk
-
-:returns
-- similarities: list with elements of the following format
-    [s1 = similarity(query, note_state_i), s2 = similarity(query, relevant_info_i)]
-"""
-def cos_sim_query_to_note_and_extract_over_time(query: str, note_states: list) -> list:
-    embedding_model = OpenAIEmbeddingModel()
-    query_embd = embedding_model.create_embedding(query)
-    similarities = []
-
-    for note_state in note_states:
-        extract_embd = embedding_model.create_embedding(note_state['relevant_info_extracted'])
-        note_embd = embedding_model.create_embedding(note_state['synthed_note_state'])
-
-        extract_sim = cosine_similarity(query_embd, extract_embd)
-        note_sim = cosine_similarity(query_embd, note_embd)
-
-        similarities.append([note_sim, extract_sim])
-
-    return similarities
+    return note_state_embds
 
 
 def main():
@@ -126,16 +88,15 @@ def main():
     final_answer = qa_model.final_answer()
 
     # # # Run experiments
-    exp1 = cos_sim_query_to_extract_vs_chunk(query, corpus.chunks, note_states)
-    exp2 = cos_sim_query_to_note_vs_chunk(query, corpus.chunks, note_states)
-    exp3 = cos_sim_query_to_note_and_extract_over_time(query, note_states)
+    embedding_model = OpenAIEmbeddingModel()
+    query_embd = embedding_model.create_embedding(query)
+    note_state_dict_embds = create_note_state_dict_embeddings(note_states)
+
+    query_to_chunk, query_to_extract, query_to_note = cos_sim_query_to_chunk_extract_note(query_embd, note_state_dict_embds)
 
     # # # Display results
-    print_list(exp1)
-    print('-'*80)
-    print_list(exp2)
-    print('-'*80)
-    print_list(exp3)
+    # TODO: plot results, analyze them
+    # TODO: use better corpuses, etc.
 
 
 if __name__ == "__main__":

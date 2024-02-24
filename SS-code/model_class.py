@@ -1,5 +1,6 @@
 from openai import OpenAI
 from chunk_utils import split_text
+from embedding_utils import OpenAIEmbeddingModel
 import json
 
 # TODO: Delete before push!!!
@@ -46,7 +47,7 @@ class GPT:
 
 
 """
-Object to deal with retrieval corpuses.
+Object to deal with retrieval corpus text chunks.
 """
 class Corpus:
     """
@@ -56,14 +57,23 @@ class Corpus:
     - name
     - text_file: path to .txt file holding corpus data
     - chunk_size: token size of chunks for chunking process of corpus text
+    - (optional) embed: whether to embed the chunks of the corpus
     """
-    def __init__(self, name: str, text_file: str, chunk_size: int):
+    def __init__(self, name: str, text_file: str, chunk_size: int, embed=False):
         self.name = name
         with open(text_file, "r") as f:
             self.text = f.read()
         self.chunk_size = chunk_size
         self.chunks = split_text(text=self.text, max_tokens=chunk_size)
         self.num_chunks = len(self.chunks)
+
+        if not embed:
+            self.embedded_chunks = None
+        else:
+            self.embedded_chunks = []
+            embedding_model = OpenAIEmbeddingModel()
+            for chunk in self.chunks:
+                self.embedded_chunks.append(embedding_model.create_embedding(chunk))
 
 
 """
