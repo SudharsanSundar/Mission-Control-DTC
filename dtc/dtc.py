@@ -23,8 +23,12 @@ class Corpus:
             raise Exception('Please initialize a corpus by passing ONE of a text file path or the text itself.')
 
         self.name = name
-        with open(text_file, "r") as f:
-            self.text = f.read()
+        if text_file:
+            with open(text_file, "r") as f:
+                self.text = f.read()
+        else:
+            self.text = text
+
         self.chunk_size = chunk_size
         self.chunks = split_text(text=self.text, max_tokens=chunk_size)
         self.num_chunks = len(self.chunks)
@@ -42,7 +46,7 @@ class Corpus:
 Object to deal with experimental sliding window + scratchpad architecture.
 """
 class MetaRNN:
-    def __init__(self, qa_model: GPT, query=''):
+    def __init__(self, qa_model: GPT, query='', verbose=False):
         """
         Init the MetaRNN with a corpus and a query.
 
@@ -72,6 +76,7 @@ Please answer the given query based on the given information.'''
 
         self.no_info_prompt = '''Please answer the given query. In your answer, please make sure to note there was no relevant information to query in the provided corpus. 
 Query: {query}.'''
+        self.verbose = verbose
 
     """
     Extract relevant info from chunk.
@@ -140,12 +145,12 @@ Query: {query}.'''
                                     'relevant_info_extracted': relevant_info,
                                     'synthed_note_state': "SKIPPED_CHUNK"})
 
-
-            print('STATE #', len(note_states), '\n',
-                  'CHUNK:', note_states[-1]['chunk'], '\n',
-                  'RELEVANT INFO:', note_states[-1]['relevant_info_extracted'], '\n',
-                  'NEW NOTE STATE:', note_states[-1]['synthed_note_state'], '\n',
-                  '-' * 80)
+            if self.verbose:
+                print('STATE #', len(note_states), '\n',
+                      'CHUNK:', note_states[-1]['chunk'], '\n',
+                      'RELEVANT INFO:', note_states[-1]['relevant_info_extracted'], '\n',
+                      'NEW NOTE STATE:', note_states[-1]['synthed_note_state'], '\n',
+                      '-' * 80)
 
         # Save all intermediate note states
         with open('all_note_states.json', 'w') as f:

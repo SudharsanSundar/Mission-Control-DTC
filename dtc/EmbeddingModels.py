@@ -54,6 +54,7 @@ class FaissIndex:
         self.index.add(self.embeddings)
 
     def search(self, text):
-        embedding = self.model.create_embedding(text)
-        distances, indices = self.index.search(embedding, k=self.k)
-        return distances, indices
+        embedding = np.array([np.array(self.model.create_embedding(text), dtype=np.float32).squeeze()])
+
+        distances, indices = self.index.search(x=embedding, k=self.k)
+        return distances, indices[0]

@@ -47,3 +47,39 @@ def split_text(text, max_tokens, tokenizer=tiktoken.get_encoding("cl100k_base"))
 
 def cosine_similarity(a, b):
     return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+
+
+def extract_letter(answer):
+    match = re.search(r'\b([A-Z])\b', answer)
+    return match.group(1) if match else None
+
+
+def get_mcq_answer(question: str, context: str, options: str, num_options: int, qa_model):
+    prompt_1 = f'''
+    Context: {context}
+    Question: {question}
+    Options: {options}
+    '''
+
+    answer_1 = qa_model.answer_question(prompt_1)
+
+    print('Answer 1: ', answer_1)
+
+    prompt_2 = f'''
+    Question: {question}
+    Answer: {answer_1}
+    Options: {options}
+    Thus, amongst options A through {chr(num_options + 64)}, give the letter and nothing else. If none of the options work, write -1
+    '''
+
+    answer_2 = qa_model.answer_question(prompt_2)
+
+    print('Answer 2: ', answer_2)
+
+    match = extract_letter(answer_2)
+
+    return match, answer_2
+
+
+
