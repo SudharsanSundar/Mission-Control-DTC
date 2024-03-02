@@ -4,8 +4,10 @@ from embedding_utils import OpenAIEmbeddingModel
 import json
 
 # TODO: Delete before push!!!
-SS_API_KEY = ''
+SS_API_KEY = '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'
+SS_TOG_API_KEY = ''
 client = OpenAI(api_key=SS_API_KEY)
+togClient = OpenAI(api_key=SS_TOG_API_KEY, base_url='https://api.together.xyz')
 
 
 """
@@ -40,7 +42,44 @@ class GPT:
             messages=[
                 {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": prompt}
+            ],
+            temperature=0
+        )
+
+        return completion.choices[0].message.content
+
+
+"""
+Handles calls to tgoether ai models
+"""
+class TogModel:
+    def __init__(self,
+                 model="mistralai/Mixtral-8x7B-Instruct-v0.1",
+                 system_prompt="You are a Question Answering portal.",
+                 max_tokens=1024):
+        self.model = model
+        self.system_prompt = system_prompt
+        self.max_tokens = max_tokens
+
+    def answer(self, prompt: str):
+        completion = client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": self.system_prompt},
+                {"role": "user", "content": prompt}
             ]
+        )
+
+        return completion
+
+    def answer_txt(self, prompt: str) -> str:
+        completion = client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": self.system_prompt},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0
         )
 
         return completion.choices[0].message.content
@@ -181,7 +220,7 @@ Query: {query}.'''
             else:
                 note_states.append({'chunk': chunk,
                                     'relevant_info_extracted': relevant_info,
-                                    'synthed_note_state': "SKIPPED_CHUNK"})
+                                    'synthed_note_state': self.notepad})
 
             print('STATE #', len(note_states), '\n',
                   'CHUNK:', note_states[-1]['chunk'], '\n',
