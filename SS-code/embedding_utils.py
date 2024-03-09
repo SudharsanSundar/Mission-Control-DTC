@@ -2,10 +2,13 @@
 import faiss
 import numpy as np
 from openai import OpenAI
+import anthropic
 
 # TODO: Delete before push!!!
-SS_API_KEY = ''
-client = OpenAI(api_key=SS_API_KEY)
+
+client = OpenAI(api_key=OAI_API_KEY)
+togClient = OpenAI(api_key=TOG_API_KEY, base_url='https://api.together.xyz')
+antClient = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
 
 # """
