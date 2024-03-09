@@ -26,16 +26,16 @@ class GPT:
         self.model = model
         self.system_prompt = system_prompt
 
-    # def answer(self, prompt: str):
-    #     completion = client.chat.completions.create(
-    #         model=self.model,
-    #         messages=[
-    #             {"role": "system", "content": self.system_prompt},
-    #             {"role": "user", "content": prompt}
-    #         ]
-    #     )
-    #
-    #     return completion
+    def answer(self, prompt: str):
+        completion = client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": self.system_prompt},
+                {"role": "user", "content": prompt}
+            ]
+        )
+
+        return completion
 
     def answer_txt(self, prompt: str) -> str:
         completion = client.chat.completions.create(
@@ -62,16 +62,16 @@ class TogModel:
         self.system_prompt = system_prompt
         self.max_tokens = max_tokens
 
-    # def answer(self, prompt: str):
-    #     completion = client.chat.completions.create(
-    #         model=self.model,
-    #         messages=[
-    #             {"role": "system", "content": self.system_prompt},
-    #             {"role": "user", "content": prompt}
-    #         ]
-    #     )
-    #
-    #     return completion
+    def answer(self, prompt: str):
+        completion = client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": self.system_prompt},
+                {"role": "user", "content": prompt}
+            ]
+        )
+
+        return completion
 
     def answer_txt(self, prompt: str) -> str:
         completion = client.chat.completions.create(

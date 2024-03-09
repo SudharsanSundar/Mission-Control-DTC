@@ -1,4 +1,5 @@
-from model_class import GPT, MetaRNN, Corpus, TogModel
+from model_class import GPT, MetaRNN, Corpus, TogModel, Claude
+from io_processing import stream_jsonl, write_jsonl, list_generator
 import random
 import pprint as ppr
 from pprint import PrettyPrinter
@@ -6,36 +7,8 @@ from pprint import PrettyPrinter
 pp = ppr.PrettyPrinter(indent=4)
 
 
-def process_dost(txt_path):
-    with open(txt_path, 'r') as f:
-        file = f.read()
-
-        file = file.replace("\n\n", "!!REPLACE!!")
-        file = file.replace("\n", " ")
-        file = file.replace("!!REPLACE!!", "\n\n")
-
-    print(file)
-
-    with open(txt_path, 'w') as f:
-        f.write(file)
-
-
-def process_tb(txt_path):
-    with open(txt_path, 'r') as f:
-        file = f.read()
-
-        file = file.replace("\n\n", "!!REPLACE!!")
-        file = file.replace("\n", " ")
-        file = file.replace("!!REPLACE!!", "\n\n")
-
-    print(file)
-
-    with open(txt_path, 'w') as f:
-        f.write(file)
-
-
-# get sized chunk
-def get_hay(file, tokens):
+# Get specified number of tokens from given haystack file (whole words)
+def get_hay(file: str, tokens: int):
     percent = tokens / 494000
 
     words = file.split(' ')
@@ -46,19 +19,16 @@ def get_hay(file, tokens):
     return hay
 
 
+# Solver for the numerical needles task
 def rec_solve(vals):
-    # print(vals)
     if len(vals) == 1:
-        # print(vals[0][0])
         return vals[0][0]
     else:
         cur = vals[0]
         ans = rec_solve(vals[1:])
         if cur[1] == ' plus ':
-            # print(cur[0], '+', ans)
             return ans + cur[0]
         elif cur[1] == ' minus ':
-            # print('-', cur[0], '+', ans)
             return ans - cur[0]
         else:
             print('somethings wrong with rec solve...')
@@ -72,14 +42,14 @@ def numerical_needles(num_needles):
     min = 0
     max = 10
 
-    # Create needle operations
+    # Create needle operations. e.g. one op is "5, plus", the next is "1, minus" etc.
     for i in range(num_needles):
         num = random.randint(min, max)
         op = random.choice(ops)
 
         prefix = None
         if i < num_needles - 1:
-            if ' plus ' in op:
+            if 'plus' in op:
                 prefix = str(num) + op
             elif 'minus' in op:
                 prefix = op + str(num)
@@ -90,10 +60,10 @@ def numerical_needles(num_needles):
 
         vals.append(prefix)
 
-    # Get correct answer
+    # Get correct answer (assuming each needle feeds into the previous, and we ask for value of needle 0)
     answer = rec_solve(vals_num)
 
-    # Create needles
+    # Create needle sentences
     ordered_needles = []
 
     for i, val in zip(range(num_needles), vals):
@@ -116,12 +86,12 @@ def numerical_needles(num_needles):
     return ordered_needles, shuffled_needles, answer
 
 
-# create needles
-def create_only_needle_prompt(needles):
+# Create prompt for needles only.
+def create_only_numerical_needle_prompt(needles):
+    # Prompt form: [use info to answer q][q][info][again use info to answer q][think step by step]
     preamble = "Please use the following information to correctly answer the following query.\n\n"
     query = 'What is the value of Needle 0?\n\n'
     engr = "Let's think step by step."
-    # needles.reverse()
     needle_str = '\n'.join(needles) + '\n\n'
 
     prompt = preamble + "Query: " + query + "Information:\n" + needle_str + "Again, please use the above information to correctly answer the following query: " + query + engr
@@ -129,7 +99,9 @@ def create_only_needle_prompt(needles):
     return prompt
 
 
-def create_hay_needle_prompt(hay, needles):
+# Create prompt for needles hidden in haystack.
+def create_hay_numerical_needle_prompt(hay, needles):
+    # Prompt form: [use info to answer q][q][info][again use info to answer q][think step by step]
     hay_lines = hay.split(' ')
     num_needles = len(needles)
     rand_pos = random.sample(range(0, len(hay_lines) - 1), num_needles)
@@ -150,6 +122,8 @@ def create_hay_needle_prompt(hay, needles):
     return prompt
 
 
+# Get numerical answer of the model. Gets the final number in last word/contiguous character sequence.
+# Works on "10." "9." "**5.**" etc.
 def extract_num(ans):
     words = ans.split(' ')
     final_word = words[-1]
@@ -162,52 +136,72 @@ def extract_num(ans):
         # num_ans = int(final_word[:-1])
         return int(cleaned_num)
     except ValueError:
-        return 'Last word not numerical value'
+        return 'Last word not numerical value: ' + final_word
 
 
-def run_numerical_needle_eval(num_needles, num_tokens, corpus, num_qs, model):
+# Runs eval on progressive needles task for a given model and problem formulation.
+def run_needle_eval(num_needles: int,
+                    needle_func,
+                    num_tokens_hay: int,
+                    corpus: str,
+                    num_qs: int,
+                    q_type: str,
+                    out_fp: str,
+                    model):
     random.seed(42)
 
-    hay = get_hay(corpus, num_tokens)
+    hay = get_hay(corpus, num_tokens_hay)
+
     eval_results = []
     num_right_raw = 0
     num_right_hay = 0
 
     for i in range(num_qs):
-        needles, shuff_needles, ans = numerical_needles(num_needles)
-        needle_only_prompt = create_only_needle_prompt(shuff_needles)
-        haystack_prompt = create_hay_needle_prompt(hay, shuff_needles)
+        # Generate needles and corresponding prompts
+        needles, shuffled_needles, ans = needle_func(num_needles)
+        if q_type == 'numerical':
+            needle_only_prompt = create_only_numerical_needle_prompt(shuffled_needles)
+            haystack_prompt = create_hay_numerical_needle_prompt(hay, shuffled_needles)
+        elif q_type == 'code':
+            print('not yet implemented')
 
-        raw_ans = model.answer_txt(needle_only_prompt)  # TODO: make generation up to 1k tokens long, TEMP 0, etc.
+        # Get model answers
+        raw_ans = model.answer_txt(needle_only_prompt)  # Temp 0
         hay_ans = model.answer_txt(haystack_prompt)
-
         raw_ans_num = extract_num(raw_ans)
         hay_ans_num = extract_num(hay_ans)
+
+        # Score answers
         if type(raw_ans_num) is int:
             num_right_raw += 1 if raw_ans_num == ans else 0
         if type(hay_ans_num) is int:
             num_right_hay += 1 if hay_ans_num == ans else 0
 
-        eval_results.append({'needles-only-prompt': needle_only_prompt,
-                             'haystack-prompt': haystack_prompt,
-                             'needles-only-ans': raw_ans,
-                             'needles-only-ans-num': raw_ans_num,
-                             'haystack-ans': hay_ans,
-                             'haystack-ans-num': hay_ans_num,
-                             'correct-ans': ans})
+        # Save details of the example
+        result_verbose = {'needles-only-prompt': needle_only_prompt,
+                          'haystack-prompt': haystack_prompt,
+                          'needles-only-ans': raw_ans,
+                          'needles-only-ans-num': raw_ans_num,
+                          'haystack-ans': hay_ans,
+                          'haystack-ans-num': hay_ans_num,
+                          'correct-ans': ans}
+        eval_results.append(result_verbose)
 
+        # Print update
         result = {'needles-only-ans': raw_ans,
-                  'haystack-ans': hay_ans,
-                 }
+                  'haystack-ans': hay_ans}
         pp.pprint(result)
         print('correct:', ans, '| needles only:', raw_ans_num, '(total', num_right_raw,  ') | haystack: ', hay_ans_num, '(total', num_right_hay, ')')
+
+    # Save eval results
+    write_jsonl(out_fp, list_generator(eval_results))
 
     return num_right_raw / num_qs, num_right_hay / num_qs, eval_results
 
 
 def main():
     with open('dost.txt', 'r') as f:
-        dost = f.read()
+        novel = f.read()
 
     with open('tb.txt', 'r') as f:
         tb = f.read()
@@ -215,31 +209,23 @@ def main():
     gpt3p5 = GPT(model='gpt-3.5-turbo-0125')
     gpt4 = GPT(model='gpt-4-0125-preview')
     mixtral54BIns = TogModel(model='mistralai/Mixtral-8x7B-Instruct-v0.1')
+    claude3Sonnet = Claude()
+    claude3Opus = Claude(model="claude-3-opus-20240229")
 
-    tokens16k = 16000
-    hay = get_hay(dost, 1000)
-    # print(hay)
-
-    # num_needles = 10
-    # needles, shuffled_needles, ans = numerical_needles(num_needles)
-    # for needle in needles:
-    #     print(needle)
-    # print(ans)
-
-    # print(create_only_needle_prompt(needles))
-    # print(create_only_needle_prompt(shuffled_needles))
-    # print(ans)
-
-    # print(create_hay_needle_prompt(hay, needles))
-    # print(ans)
-
-    num_needles = 5
-    num_tokens = 5000
+    num_needles = 15
+    num_tokens_hay = 10000
     num_qs = 50
 
-    acc1, acc2, results = run_numerical_needle_eval(num_needles, num_tokens, tb, num_qs, gpt3p5)
-    # pp.pprint(results)
-    # print(acc1, acc2)
+    acc_raw, acc_hay, results = run_needle_eval(num_needles=num_needles,
+                                                needle_func=numerical_needles,
+                                                num_tokens_hay=num_tokens_hay,
+                                                corpus=novel,
+                                                num_qs=num_qs,
+                                                q_type='numerical',
+                                                out_fp='???.jsonl',
+                                                model=claude3Opus)
+    pp.pprint(results)
+    print(acc_raw, acc_hay)
 
 
 if __name__ == "__main__":
