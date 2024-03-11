@@ -306,74 +306,52 @@ def run_needle_eval(num_needles: int,
 
     return num_right_raw / num_qs, num_right_hay / num_qs, eval_results
 
+def check_subsets(file):
+    shortRight_longWrong = 0
+    shortRight_longRight = 0
+    shortWrong_longWrong = 0
+    shortWrong_longRight = 0
+    raw_diff_short = 0
+    raw_diff_long = 0
+
+    for ex in file:
+        shortAns = ex['needles-only-ans-num'] if type(ex['needles-only-ans-num']) == int else -10000
+        longAns = ex['haystack-ans-num'] if type(ex['haystack-ans-num']) == int else -10000
+        correctAns = ex['correct-ans']
+
+        if shortAns == correctAns:
+            if longAns == correctAns:
+                shortRight_longRight += 1
+            else:
+                shortRight_longWrong += 1
+                raw_diff_long += abs(correctAns - longAns) / abs(correctAns) if longAns != -10000 else 0
+        else:
+            if longAns == correctAns:
+                shortWrong_longRight += 1
+                raw_diff_short += abs(correctAns - shortAns) / abs(correctAns) if shortAns != -10000 else 0
+            else:
+                shortWrong_longWrong += 1
+                raw_diff_short += abs(correctAns - shortAns) / abs(correctAns) if shortAns != -10000 else 0
+                raw_diff_long += abs(correctAns - longAns) / abs(correctAns) if longAns != -10000 else 0
+
+    print('short right, long wrong:', shortRight_longWrong)
+    print('short wrong, long right:', shortWrong_longRight)
+    print('both right:', shortRight_longRight)
+    print('both wrong:', shortWrong_longWrong)
+    print('raw abs dev, short:', raw_diff_short, raw_diff_short / 50)
+    print('raw abs dev, long:', raw_diff_long, raw_diff_long / 50)
+    print('total qs:', shortRight_longWrong + shortWrong_longRight + shortRight_longRight + shortWrong_longWrong)
+
 
 def main():
-    with open('../progressive_needles/hay_data/dost.txt', 'r') as f:
-        novel = f.read()
+    print(os.getcwd())
+    claude3OpusAnsF = 'results/numericalProgNeedles_Claude3Opus_15needles_10kT_50qs_seed42.jsonl'
+    gpt3p5AnsF = 'results/numericalProgNeedles_gpt3p5_15needles_10kT_50qs_seed42.jsonl'
+    claude3OpusAns = stream_jsonl(claude3OpusAnsF)
+    gpt3p5Ans = stream_jsonl(gpt3p5AnsF)
 
-    # with open('progressive_needles/hay_data/tb.txt', 'r') as f:
-    #     tb = f.read()
-    #
-    with open('../progressive_needles/hay_data/human_eval_concat.txt', 'r') as f: # with open('progressive_needles/hay_data/human_eval_concat.txt', 'r') as f:
-        code = f.read()
-
-    gpt3p5 = GPT(model='gpt-3.5-turbo-0125')
-    gpt4 = GPT(model='gpt-4-0125-preview')
-    mixtral54BIns = TogModel(model='mistralai/Mixtral-8x7B-Instruct-v0.1')
-    claude3Sonnet = Claude()
-    claude3Opus = Claude(model="claude-3-opus-20240229")
-
-    num_needles = 15
-    num_tokens_hay = 10000
-    num_qs = 50
-
-    # acc_raw, acc_hay, results = run_needle_eval(num_needles=num_needles,
-    #                                             needle_func=numerical_needles,
-    #                                             num_tokens_hay=num_tokens_hay,
-    #                                             corpus=novel,
-    #                                             num_qs=num_qs,
-    #                                             q_type='numerical',
-    #                                             out_fp='progressive_needles/results/numericalProgNeedles_gpt3p5_15needles_10kT_50qs_seed42.jsonl',
-    #                                             model=gpt3p5)
-    # pp.pprint(results)
-    # print(acc_raw, acc_hay)
-
-    # num_needles = 10
-    # num_tokens_hay = 10000
-    # num_qs = 50
-    #
-    # acc_raw, acc_hay, results = run_needle_eval(num_needles=num_needles,
-    #                                             needle_func=code_needles,
-    #                                             num_tokens_hay=num_tokens_hay,
-    #                                             corpus=code,
-    #                                             num_qs=num_qs,
-    #                                             q_type='code',
-    #                                             out_fp='../progressive_needles/results/codeProgNeedles_gpt3p5_10needles_10kT_50qs_seed42.jsonl',
-    #                                             model=gpt3p5)
-    # pp.pprint(results)
-    # print(acc_raw, acc_hay)
-
-    # _, shuff, ans = code_needles(5)
-    # code_hay, hay_tok = get_code_hay(code, 5000)
-    # print('REAL TOK: ', hay_tok)
-    #
-    # print(create_hay_code_needle_prompt(code_hay, shuff))
-    # print(create_only_code_needle_prompt(shuff), ans)
-
-    # _, shuff, ans = numerical_needles(5)
-    # hay, hay_tok = get_hay(code, 5000)
-    # print('REAL TOK: ', hay_tok)
-    #
-    # print(create_hay_numerical_needle_prompt(hay, shuff))
-    # print(create_only_numerical_needle_prompt(shuff), ans)
-
-    hay, hay_tok = get_hay(novel, 5000)
-    print(hay_tok)
-    hay, hay_tok = get_hay(novel, 10000)
-    print(hay_tok)
-
-
-
+    check_subsets(claude3OpusAns)
+    check_subsets(gpt3p5Ans)
 
 
 if __name__ == "__main__":
