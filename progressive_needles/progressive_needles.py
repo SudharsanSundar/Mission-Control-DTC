@@ -307,26 +307,102 @@ def run_needle_eval(num_needles: int,
     return num_right_raw / num_qs, num_right_hay / num_qs, eval_results
 
 
+def run_evals(model, exp_list, model_name):
+    # exp_detail: [num_needles, numtok_hay, haystack, needle_func, q_type, out_fp]
+    sum_results = []
+    with open('../progressive_needles/hay_data/dost.txt', 'r') as f:
+        novel = f.read()
+
+    with open('../progressive_needles/hay_data/tb.txt', 'r') as f:
+        tb = f.read()
+
+    with open('../progressive_needles/hay_data/human_eval_concat.txt', 'r') as f: # with open('progressive_needles/hay_data/human_eval_concat.txt', 'r') as f:
+        code = f.read()
+
+    hays = [novel, code, tb]
+    for exp in exp_list:
+        print('EXP DETAILS!', f'''
+        result = run_needle_eval(num_needles={exp[0]},
+                                 needle_func={exp[1]},
+                                 num_tokens_hay={exp[2]},
+                                 corpus={exp[3]},
+                                 num_qs={exp[4]},
+                                 q_type={exp[5]},
+                                 out_fp={exp[6]},
+                                 model={model_name})
+        ''')
+
+        result = run_needle_eval(num_needles=exp[0],
+                                 needle_func=exp[1],
+                                 num_tokens_hay=exp[2],
+                                 corpus=hays[exp[3]],
+                                 num_qs=exp[4],
+                                 q_type=exp[5],
+                                 out_fp=exp[6],
+                                 model=model)
+
+        # pp.pprint(result[2])
+        print('acc raw vs. hay', result[0], result[1])
+        sum_results.append(result)
+
+    return sum_results
+
+
 def main():
     with open('../progressive_needles/hay_data/dost.txt', 'r') as f:
         novel = f.read()
 
-    # with open('progressive_needles/hay_data/tb.txt', 'r') as f:
-    #     tb = f.read()
-    #
+    with open('../progressive_needles/hay_data/tb.txt', 'r') as f:
+        tb = f.read()
+
     with open('../progressive_needles/hay_data/human_eval_concat.txt', 'r') as f: # with open('progressive_needles/hay_data/human_eval_concat.txt', 'r') as f:
         code = f.read()
 
     gpt3p5 = GPT(model='gpt-3.5-turbo-0125')
     gpt4 = GPT(model='gpt-4-0125-preview')
+    mistral7B = TogModel(model='mistralai/Mistral-7B-Instruct-v0.2')
     mixtral54BIns = TogModel(model='mistralai/Mixtral-8x7B-Instruct-v0.1')
-    claude3Sonnet = Claude()
+    qwen1p572B = TogModel(model='Qwen/Qwen1.5-72B')
+    llama270Bchat = TogModel(model='meta-llama/Llama-2-70b-chat-hf')
+    claude3Sonnet = Claude(model='claude-3-sonnet-20240229')
     claude3Opus = Claude(model="claude-3-opus-20240229")
 
-    num_needles = 15
-    num_tokens_hay = 10000
-    num_qs = 50
+    # num_needles = exp[0],
+    # needle_func = exp[1],
+    # num_tokens_hay = exp[2],
+    # corpus = hays[exp[3]],  hays = [novel, code, tb]
+    # num_qs = exp[4],
+    # q_type = exp[5],
+    # out_fp = exp[6],
+    # model = model)
+    model_name = 'gpt3.5'
+    model = gpt3p5
+    exp_list = [
+                [2, numerical_needles, 5000, 0, 50, 'numerical',
+                 '../progressive_needles/results/numericalProgNeedles_'+model_name+'_2needles_5kT_50qs_seed42.jsonl'],
+                [4, numerical_needles, 5000, 0, 50, 'numerical',
+                 '../progressive_needles/results/numericalProgNeedles_'+model_name+'_4needles_5kT_50qs_seed42.jsonl'],
+                [2, numerical_needles, 10000, 0, 50, 'numerical',
+                 '../progressive_needles/results/numericalProgNeedles_'+model_name+'_2needles_10kT_50qs_seed42.jsonl'],
+                [4, numerical_needles, 10000, 0, 50, 'numerical',
+                 '../progressive_needles/results/numericalProgNeedles_'+model_name+'_4needles_10kT_50qs_seed42.jsonl'],
+                [2, code_needles, 5000, 1, 50, 'code',
+                 '../progressive_needles/results/codeProgNeedles_'+model_name+'_2needles_5kT_50qs_seed42.jsonl'],
+                [4, code_needles, 5000, 1, 50, 'code',
+                 '../progressive_needles/results/codeProgNeedles_'+model_name+'_4needles_5kT_50qs_seed42.jsonl'],
+                [2, code_needles, 10000, 1, 50, 'code',
+                 '../progressive_needles/results/codeProgNeedles_'+model_name+'_2needles_10kT_50qs_seed42.jsonl'],
+                [4, code_needles, 10000, 1, 50, 'code',
+                 '../progressive_needles/results/codeProgNeedles_'+model_name+'_4needles_10kT_50qs_seed42.jsonl'],
+                ]
 
+    run_evals(model=model, exp_list=exp_list, model_name=model_name)
+
+
+    # num_needles = 15
+    # num_tokens_hay = 10000
+    # num_qs = 50
+    #
     # acc_raw, acc_hay, results = run_needle_eval(num_needles=num_needles,
     #                                             needle_func=numerical_needles,
     #                                             num_tokens_hay=num_tokens_hay,
@@ -352,28 +428,6 @@ def main():
     #                                             model=gpt3p5)
     # pp.pprint(results)
     # print(acc_raw, acc_hay)
-
-    # _, shuff, ans = code_needles(5)
-    # code_hay, hay_tok = get_code_hay(code, 5000)
-    # print('REAL TOK: ', hay_tok)
-    #
-    # print(create_hay_code_needle_prompt(code_hay, shuff))
-    # print(create_only_code_needle_prompt(shuff), ans)
-
-    # _, shuff, ans = numerical_needles(5)
-    # hay, hay_tok = get_hay(code, 5000)
-    # print('REAL TOK: ', hay_tok)
-    #
-    # print(create_hay_numerical_needle_prompt(hay, shuff))
-    # print(create_only_numerical_needle_prompt(shuff), ans)
-
-    hay, hay_tok = get_hay(novel, 5000)
-    print(hay_tok)
-    hay, hay_tok = get_hay(novel, 10000)
-    print(hay_tok)
-
-
-
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ import anthropic
 
 # TODO: Delete before push!!! Add your own API key!!!
 
+
 client = OpenAI(api_key=OAI_API_KEY)
 togClient = OpenAI(api_key=TOG_API_KEY, base_url='https://api.together.xyz')
 antClient = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
@@ -26,7 +27,7 @@ class GPT:
     """
     def __init__(self,
                  model="gpt-3.5-turbo",
-                 system_prompt="You are a Question Answering portal."):
+                 system_prompt="You are a helpful assistant."):
         self.model = model
         self.system_prompt = system_prompt
 
@@ -60,7 +61,7 @@ Handles calls to tgoether ai models
 class TogModel:
     def __init__(self,
                  model="mistralai/Mixtral-8x7B-Instruct-v0.1",
-                 system_prompt="You are a Question Answering portal.",
+                 system_prompt="You are a helpful assistant.",
                  max_tokens=1024):
         self.model = model
         self.system_prompt = system_prompt
@@ -78,7 +79,7 @@ class TogModel:
     #     return completion
 
     def answer_txt(self, prompt: str) -> str:
-        completion = client.chat.completions.create(
+        completion = togClient.chat.completions.create(
             model=self.model,
             messages=[
                 {"role": "system", "content": self.system_prompt},
