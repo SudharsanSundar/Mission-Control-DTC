@@ -5,6 +5,8 @@ import pprint as ppr
 from pprint import PrettyPrinter
 import tiktoken
 import os
+import numpy as np
+from matplotlib import pyplot as plt
 
 pp = ppr.PrettyPrinter(indent=4)
 # All modern models
@@ -306,6 +308,7 @@ def run_needle_eval(num_needles: int,
 
     return num_right_raw / num_qs, num_right_hay / num_qs, eval_results
 
+
 def check_subsets(file):
     shortRight_longWrong = 0
     shortRight_longRight = 0
@@ -318,21 +321,22 @@ def check_subsets(file):
         shortAns = ex['needles-only-ans-num'] if type(ex['needles-only-ans-num']) == int else -10000
         longAns = ex['haystack-ans-num'] if type(ex['haystack-ans-num']) == int else -10000
         correctAns = ex['correct-ans']
+        penalty = 0
 
         if shortAns == correctAns:
             if longAns == correctAns:
                 shortRight_longRight += 1
             else:
                 shortRight_longWrong += 1
-                raw_diff_long += abs(correctAns - longAns) / abs(correctAns) if longAns != -10000 else 0
+                raw_diff_long += abs(correctAns - longAns) if longAns != -10000 else penalty
         else:
             if longAns == correctAns:
                 shortWrong_longRight += 1
-                raw_diff_short += abs(correctAns - shortAns) / abs(correctAns) if shortAns != -10000 else 0
+                raw_diff_short += abs(correctAns - shortAns) if shortAns != -10000 else penalty
             else:
                 shortWrong_longWrong += 1
-                raw_diff_short += abs(correctAns - shortAns) / abs(correctAns) if shortAns != -10000 else 0
-                raw_diff_long += abs(correctAns - longAns) / abs(correctAns) if longAns != -10000 else 0
+                raw_diff_short += abs(correctAns - shortAns) if shortAns != -10000 else penalty
+                raw_diff_long += abs(correctAns - longAns) if longAns != -10000 else penalty
 
     print('short right, long wrong:', shortRight_longWrong)
     print('short wrong, long right:', shortWrong_longRight)
@@ -343,15 +347,42 @@ def check_subsets(file):
     print('total qs:', shortRight_longWrong + shortWrong_longRight + shortRight_longRight + shortWrong_longWrong)
 
 
+def check_output_lengths(fp):
+    file = stream_jsonl(fp)
+    out_lens = []
+    out_lens2 = []
+
+    for ex in file:
+        out_lens.append(len(gpt_encoding.encode(text=ex['needles-only-ans'])))
+        out_lens2.append(len(gpt_encoding.encode(text=ex['haystack-ans'])))
+        print(ex['needles-only-prompt'], ex['correct-ans'])
+
+    print(fp.split('_'))
+    print('needles only:', sum(out_lens) / len(out_lens), '| haystack:', sum(out_lens2) / len(out_lens2))
+
+    plt.plot([i for i in range(len(out_lens))], out_lens)
+    plt.show()
+    plt.plot([i for i in range(len(out_lens2))], out_lens2)
+    plt.show()
+
+    return out_lens, out_lens2
+
+
 def main():
     print(os.getcwd())
     claude3OpusAnsF = 'results/numericalProgNeedles_Claude3Opus_15needles_10kT_50qs_seed42.jsonl'
-    gpt3p5AnsF = 'results/numericalProgNeedles_gpt3p5_15needles_10kT_50qs_seed42.jsonl'
+    claude3SonnetAnsF = 'results/numericalProgNeedles_claude3Sonnet_4needles_15kT_50qs_seed42.jsonl'
+    gpt3p5AnsF = 'results/numericalProgNeedles_gpt3.5_4needles_10kT_50qs_seed42.jsonl'
+    mixtralAnsF = 'results/numericalProgNeedles_mistralMoE_4needles_10kT_50qs_seed42.jsonl'
     claude3OpusAns = stream_jsonl(claude3OpusAnsF)
+    claude3SonnetAns = stream_jsonl(claude3SonnetAnsF)
     gpt3p5Ans = stream_jsonl(gpt3p5AnsF)
 
-    check_subsets(claude3OpusAns)
-    check_subsets(gpt3p5Ans)
+    check_subsets(claude3SonnetAns)
+
+    # check_output_lengths(claude3OpusAnsF)
+    # check_output_lengths(gpt3p5AnsF)
+    # check_output_lengths(mixtralAnsF)
 
 
 if __name__ == "__main__":

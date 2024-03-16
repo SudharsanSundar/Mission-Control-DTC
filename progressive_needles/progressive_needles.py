@@ -1,10 +1,12 @@
 from model_class import GPT, TogModel, Claude
-from io_processing import stream_jsonl, write_jsonl, list_generator
+from io_processing import stream_jsonl, write_jsonl, list_generator, jsonl_to_list
 import random
 import pprint as ppr
 from pprint import PrettyPrinter
 import tiktoken
 import os
+import anthropic
+import time
 
 pp = ppr.PrettyPrinter(indent=4)
 # All modern models
@@ -14,6 +16,18 @@ gpt_encoding = tiktoken.get_encoding('cl100k_base')
 # Get specified number of tokens from given haystack file (whole words)
 def get_hay(file: str, tokens: int):
     percent = tokens / 494000
+
+    words = file.split(' ')
+    new_words = words[:int(percent * len(words))]
+
+    hay = ' '.join(new_words)
+
+    return hay, len(gpt_encoding.encode(text=hay))
+
+
+# Get specified number of tokens from given haystack file (whole words)
+def get_hay_new(file: str, tokens: int):
+    percent = tokens / 494000.0
 
     words = file.split(' ')
     new_words = words[:int(percent * len(words))]
@@ -250,7 +264,8 @@ def run_needle_eval(num_needles: int,
                     num_qs: int,
                     q_type: str,
                     out_fp: str,
-                    model):
+                    model,
+                    skip_until=0):
     random.seed(42)
 
     if q_type == 'numerical':
@@ -262,6 +277,7 @@ def run_needle_eval(num_needles: int,
     eval_results = []
     num_right_raw = 0
     num_right_hay = 0
+    skip_counter = 0
 
     for i in range(num_qs):
         # Generate needles and corresponding prompts
@@ -272,6 +288,11 @@ def run_needle_eval(num_needles: int,
         elif q_type == 'code':
             needle_only_prompt = create_only_code_needle_prompt(shuffled_needles)
             haystack_prompt = create_hay_code_needle_prompt(hay, shuffled_needles)
+
+        if skip_counter < skip_until:
+            skip_counter += 1
+            print('skipped', i)
+            continue
 
         # Get model answers
         raw_ans = model.answer_txt(needle_only_prompt)  # Temp 0
@@ -301,13 +322,131 @@ def run_needle_eval(num_needles: int,
         pp.pprint(result)
         print('correct:', ans, '| needles only:', raw_ans_num, '(total', num_right_raw,  ') | haystack: ', hay_ans_num, '(total', num_right_hay, ')')
 
-    # Save eval results
-    write_jsonl(out_fp, list_generator(eval_results))
+        # Save eval results
+        write_jsonl(out_fp, list_generator(eval_results))
 
     return num_right_raw / num_qs, num_right_hay / num_qs, eval_results
 
 
-def run_evals(model, exp_list, model_name):
+def run_needle_eval_on_fixed_questions(num_needles: int,
+                    needle_func,
+                    num_tokens_hay: int,
+                    corpus: str,
+                    num_qs: int,
+                    q_type: str,
+                    out_fp: str,
+                    model,
+                    q_fp: str,
+                    skip_until=0):
+    random.seed(42)
+
+    if q_type == 'numerical':
+        hay, hay_tokens = get_hay(corpus, num_tokens_hay)
+    elif q_type == 'code':
+        hay, hay_tokens = get_code_hay(corpus, num_tokens_hay)
+    print('ACTUAL HAY TOKENS: ', hay_tokens)
+
+    eval_results = []
+    num_right_raw = 0
+    num_right_hay = 0
+    skip_counter = 0
+
+    questions = jsonl_to_list(q_fp)
+    # ppr.pprint(questions)
+    i = 0
+
+    while i < len(list(questions)):
+        q = questions[i]
+        try:
+            if skip_counter < skip_until:
+                print('SKIPPED example', skip_counter)
+                skip_counter += 1
+                i += 1
+                continue
+            # Generate needles and corresponding prompts
+            needle_only_prompt = q['needles-only-prompt']
+            haystack_prompt = q['haystack-prompt']
+            ans = q['correct-ans']
+
+            # Get model answers
+            raw_ans = model.answer_txt(needle_only_prompt)  # Temp 0
+            print('first call good')
+            hay_ans = model.answer_txt(haystack_prompt)
+            print('second call good')
+            raw_ans_num = extract_num(raw_ans)
+            hay_ans_num = extract_num(hay_ans)
+
+            # Score answers
+            if type(raw_ans_num) is int:
+                num_right_raw += 1 if raw_ans_num == ans else 0
+            if type(hay_ans_num) is int:
+                num_right_hay += 1 if hay_ans_num == ans else 0
+
+            # Save details of the example
+            result_verbose = {'needles-only-prompt': needle_only_prompt,
+                              'haystack-prompt': haystack_prompt,
+                              'needles-only-ans': raw_ans,
+                              'needles-only-ans-num': raw_ans_num,
+                              'haystack-ans': hay_ans,
+                              'haystack-ans-num': hay_ans_num,
+                              'correct-ans': ans}
+            eval_results.append(result_verbose)
+
+            # Print update
+            result = {'needles-only-ans': raw_ans,
+                      'haystack-ans': hay_ans}
+            pp.pprint(result)
+            print('correct:', ans, '| needles only:', raw_ans_num, '(total', num_right_raw,  ') | haystack: ', hay_ans_num, '(total', num_right_hay, ')')
+
+            # Save eval results
+            write_jsonl(out_fp, list_generator(eval_results))
+            i += 1
+        except Exception as e:
+            print('ERR,', e, 'waiting 10 min')
+            time.sleep(601) # resume after waiting 10 min
+
+        # # Generate needles and corresponding prompts
+        # needle_only_prompt = q['needles-only-prompt']
+        # haystack_prompt = q['haystack-prompt']
+        # ans = q['correct-ans']
+        #
+        # # Get model answers
+        # raw_ans = model.answer_txt(needle_only_prompt)  # Temp 0
+        # hay_ans = model.answer_txt(haystack_prompt)
+        # raw_ans_num = extract_num(raw_ans)
+        # hay_ans_num = extract_num(hay_ans)
+        #
+        # # Score answers
+        # if type(raw_ans_num) is int:
+        #     num_right_raw += 1 if raw_ans_num == ans else 0
+        # if type(hay_ans_num) is int:
+        #     num_right_hay += 1 if hay_ans_num == ans else 0
+        #
+        # # Save details of the example
+        # result_verbose = {'needles-only-prompt': needle_only_prompt,
+        #                   'haystack-prompt': haystack_prompt,
+        #                   'needles-only-ans': raw_ans,
+        #                   'needles-only-ans-num': raw_ans_num,
+        #                   'haystack-ans': hay_ans,
+        #                   'haystack-ans-num': hay_ans_num,
+        #                   'correct-ans': ans}
+        # eval_results.append(result_verbose)
+        #
+        # # Print update
+        # result = {'needles-only-ans': raw_ans,
+        #           'haystack-ans': hay_ans}
+        # pp.pprint(result)
+        # print('correct:', ans, '| needles only:', raw_ans_num, '(total', num_right_raw, ') | haystack: ',
+        #       hay_ans_num, '(total', num_right_hay, ')')
+        #
+        # # Save eval results
+        # write_jsonl(out_fp, list_generator(eval_results))
+        # i+=1
+
+    return num_right_raw / num_qs, num_right_hay / num_qs, eval_results
+
+
+def run_evals(model, exp_list, model_name, skip_until=0):
     # exp_detail: [num_needles, numtok_hay, haystack, needle_func, q_type, out_fp]
     sum_results = []
     with open('../progressive_needles/hay_data/dost.txt', 'r') as f:
@@ -329,7 +468,8 @@ def run_evals(model, exp_list, model_name):
                                  num_qs={exp[4]},
                                  q_type={exp[5]},
                                  out_fp={exp[6]},
-                                 model={model_name})
+                                 model={model_name},
+                                 skip_until={skip_until})
         ''')
 
         result = run_needle_eval(num_needles=exp[0],
@@ -339,13 +479,134 @@ def run_evals(model, exp_list, model_name):
                                  num_qs=exp[4],
                                  q_type=exp[5],
                                  out_fp=exp[6],
-                                 model=model)
+                                 model=model,
+                                 skip_until=skip_until)
 
         # pp.pprint(result[2])
         print('acc raw vs. hay', result[0], result[1])
         sum_results.append(result)
 
     return sum_results
+
+
+def run_fixed_question_evals(model, exp_list, model_name, q_fp, skip_until=0):
+    # exp_detail: [num_needles, numtok_hay, haystack, needle_func, q_type, out_fp]
+    sum_results = []
+    with open('../progressive_needles/hay_data/dost.txt', 'r') as f:
+        novel = f.read()
+
+    with open('../progressive_needles/hay_data/tb.txt', 'r') as f:
+        tb = f.read()
+
+    with open('../progressive_needles/hay_data/human_eval_concat.txt', 'r') as f: # with open('progressive_needles/hay_data/human_eval_concat.txt', 'r') as f:
+        code = f.read()
+
+    hays = [novel, code, tb]
+    for exp in exp_list:
+        print('EXP DETAILS!', f'''
+        result = run_needle_eval(num_needles={exp[0]},
+                                 needle_func={exp[1]},
+                                 num_tokens_hay={exp[2]},
+                                 corpus={exp[3]},
+                                 num_qs={exp[4]},
+                                 q_type={exp[5]},
+                                 out_fp={exp[6]},
+                                 model={model_name},
+                                 q_fp={q_fp}
+                                 skip_until={skip_until})
+        ''')
+
+        result = run_needle_eval_on_fixed_questions(num_needles=exp[0],
+                                                 needle_func=exp[1],
+                                                 num_tokens_hay=exp[2],
+                                                 corpus=hays[exp[3]],
+                                                 num_qs=exp[4],
+                                                 q_type=exp[5],
+                                                 out_fp=exp[6],
+                                                 model=model,
+                                                 q_fp=q_fp,
+                                                 skip_until=skip_until)
+
+        # pp.pprint(result[2])
+        print('acc raw vs. hay', result[0], result[1])
+        sum_results.append(result)
+
+    return sum_results
+
+
+def create_fixed_eval(num_needles: int,
+                      needle_func,
+                      num_tokens_hay: int,
+                      corpus: str,
+                      num_qs: int,
+                      q_type: str,
+                      out_fp: str,
+                      model,
+                      skip_until=0):
+    random.seed(42)
+
+    if q_type == 'numerical':
+        hay, hay_tokens = get_hay(corpus, num_tokens_hay)
+    elif q_type == 'code':
+        hay, hay_tokens = get_code_hay(corpus, num_tokens_hay)
+    print('ACTUAL HAY TOKENS: ', hay_tokens)
+
+    questions = []
+
+    for i in range(num_qs):
+        # Generate needles and corresponding prompts
+        needles, shuffled_needles, ans = needle_func(num_needles)
+        if q_type == 'numerical':
+            needle_only_prompt = create_only_numerical_needle_prompt(shuffled_needles)
+            haystack_prompt = create_hay_numerical_needle_prompt(hay, shuffled_needles)
+        elif q_type == 'code':
+            needle_only_prompt = create_only_code_needle_prompt(shuffled_needles)
+            haystack_prompt = create_hay_code_needle_prompt(hay, shuffled_needles)
+
+        # Save details of the example
+        result_verbose = {'needles-only-prompt': needle_only_prompt,
+                          'haystack-prompt': haystack_prompt,
+                          'correct-ans': ans}
+        questions.append(result_verbose)
+
+    write_jsonl(out_fp, list_generator(questions))
+
+
+def create_fixed_questions(model, exp_list, model_name, skip_until=0):
+    # exp_detail: [num_needles, numtok_hay, haystack, needle_func, q_type, out_fp]
+    sum_results = []
+    with open('../progressive_needles/hay_data/dost.txt', 'r') as f:
+        novel = f.read()
+
+    with open('../progressive_needles/hay_data/tb.txt', 'r') as f:
+        tb = f.read()
+
+    with open('../progressive_needles/hay_data/human_eval_concat.txt', 'r') as f: # with open('progressive_needles/hay_data/human_eval_concat.txt', 'r') as f:
+        code = f.read()
+
+    hays = [novel, code, tb]
+    for exp in exp_list:
+        print('EXP DETAILS!', f'''
+        result = run_needle_eval(num_needles={exp[0]},
+                                 needle_func={exp[1]},
+                                 num_tokens_hay={exp[2]},
+                                 corpus={exp[3]},
+                                 num_qs={exp[4]},
+                                 q_type={exp[5]},
+                                 out_fp={exp[6]},
+                                 model={model_name},
+                                 skip_until={skip_until})
+        ''')
+
+        result = create_fixed_eval(num_needles=exp[0],
+                                 needle_func=exp[1],
+                                 num_tokens_hay=exp[2],
+                                 corpus=hays[exp[3]],
+                                 num_qs=exp[4],
+                                 q_type=exp[5],
+                                 out_fp=exp[6],
+                                 model=model,
+                                 skip_until=skip_until)
 
 
 def main():
@@ -375,59 +636,52 @@ def main():
     # q_type = exp[5],
     # out_fp = exp[6],
     # model = model)
-    model_name = 'gpt3.5'
-    model = gpt3p5
+    model_name = 'mistral7B'
+    model = mistral7B
     exp_list = [
-                [2, numerical_needles, 5000, 0, 50, 'numerical',
-                 '../progressive_needles/results/numericalProgNeedles_'+model_name+'_2needles_5kT_50qs_seed42.jsonl'],
-                [4, numerical_needles, 5000, 0, 50, 'numerical',
-                 '../progressive_needles/results/numericalProgNeedles_'+model_name+'_4needles_5kT_50qs_seed42.jsonl'],
-                [2, numerical_needles, 10000, 0, 50, 'numerical',
-                 '../progressive_needles/results/numericalProgNeedles_'+model_name+'_2needles_10kT_50qs_seed42.jsonl'],
-                [4, numerical_needles, 10000, 0, 50, 'numerical',
-                 '../progressive_needles/results/numericalProgNeedles_'+model_name+'_4needles_10kT_50qs_seed42.jsonl'],
-                [2, code_needles, 5000, 1, 50, 'code',
-                 '../progressive_needles/results/codeProgNeedles_'+model_name+'_2needles_5kT_50qs_seed42.jsonl'],
-                [4, code_needles, 5000, 1, 50, 'code',
-                 '../progressive_needles/results/codeProgNeedles_'+model_name+'_4needles_5kT_50qs_seed42.jsonl'],
-                [2, code_needles, 10000, 1, 50, 'code',
-                 '../progressive_needles/results/codeProgNeedles_'+model_name+'_2needles_10kT_50qs_seed42.jsonl'],
-                [4, code_needles, 10000, 1, 50, 'code',
-                 '../progressive_needles/results/codeProgNeedles_'+model_name+'_4needles_10kT_50qs_seed42.jsonl'],
+                # [2, numerical_needles, 5000, 0, 50, 'numerical',
+                #  '../progressive_needles/results/numericalProgNeedles_'+model_name+'_2needles_5kT_50qs_seed42.jsonl'],
+                # [4, numerical_needles, 5000, 0, 50, 'numerical',
+                #  '../progressive_needles/results/numericalProgNeedles_'+model_name+'_4needles_5kT_50qs_seed42.jsonl'],
+                # [2, numerical_needles, 10000, 0, 50, 'numerical',
+                #  '../progressive_needles/results/numericalProgNeedles_'+model_name+'_2needles_10kT_50qs_seed42.jsonl'],
+                [4, numerical_needles, 17000, 0, 50, 'numerical',
+                 '../progressive_needles/results/numericalProgNeedles_'+model_name+'_4needles_17kT_50qs_seed42.jsonl'],
+                # [2, code_needles, 5000, 1, 50, 'code',
+                #  '../progressive_needles/results/codeProgNeedles_'+model_name+'_2needles_5kT_50qs_seed42.jsonl'],
+                # [4, code_needles, 5000, 1, 50, 'code',
+                #  '../progressive_needles/results/codeProgNeedles_'+model_name+'_4needles_5kT_50qs_seed42.jsonl'],
+                # [2, code_needles, 10000, 1, 50, 'code',
+                #  '../progressive_needles/results/codeProgNeedles_'+model_name+'_2needles_10kT_50qs_seed42.jsonl'],
+                # [4, code_needles, 10000, 1, 50, 'code',
+                #  '../progressive_needles/results/codeProgNeedles_'+model_name+'_4needles_10kT_50qs_seed42.jsonl'],
                 ]
 
-    run_evals(model=model, exp_list=exp_list, model_name=model_name)
+    # run_evals(model=model, exp_list=exp_list, model_name=model_name, skip_until=0)
 
+    model_name = 'claude3Sonnet'
+    model = claude3Sonnet
+    q_fp = '../progressive_needles/results/numericalProgNeedles_mistral7B_4needles_17kT_50qs_seed42.jsonl'
+    exp_list = [
+                # [2, numerical_needles, 5000, 0, 50, 'numerical',
+                #  '../progressive_needles/results/numericalProgNeedles_'+model_name+'_2needles_5kT_50qs_seed42.jsonl'],
+                # [4, numerical_needles, 5000, 0, 50, 'numerical',
+                #  '../progressive_needles/results/numericalProgNeedles_'+model_name+'_4needles_5kT_50qs_seed42.jsonl'],
+                # [2, numerical_needles, 10000, 0, 50, 'numerical',
+                #  '../progressive_needles/results/numericalProgNeedles_'+model_name+'_2needles_10kT_50qs_seed42.jsonl'],
+                [4, numerical_needles, 17000, 0, 50, 'numerical',
+                 '../progressive_needles/results/numericalProgNeedles_'+model_name+'_4needles_15kT_50qs_seed42_3.jsonl'],
+                # [2, code_needles, 5000, 1, 50, 'code',
+                #  '../progressive_needles/results/codeProgNeedles_'+model_name+'_2needles_5kT_50qs_seed42.jsonl'],
+                # [4, code_needles, 5000, 1, 50, 'code',
+                #  '../progressive_needles/results/codeProgNeedles_'+model_name+'_4needles_5kT_50qs_seed42.jsonl'],
+                # [2, code_needles, 10000, 1, 50, 'code',
+                #  '../progressive_needles/results/codeProgNeedles_'+model_name+'_2needles_10kT_50qs_seed42.jsonl'],
+                # [4, code_needles, 10000, 1, 50, 'code',
+                #  '../progressive_needles/results/codeProgNeedles_'+model_name+'_4needles_10kT_50qs_seed42.jsonl'],
+                ]
 
-    # num_needles = 15
-    # num_tokens_hay = 10000
-    # num_qs = 50
-    #
-    # acc_raw, acc_hay, results = run_needle_eval(num_needles=num_needles,
-    #                                             needle_func=numerical_needles,
-    #                                             num_tokens_hay=num_tokens_hay,
-    #                                             corpus=novel,
-    #                                             num_qs=num_qs,
-    #                                             q_type='numerical',
-    #                                             out_fp='progressive_needles/results/numericalProgNeedles_gpt3p5_15needles_10kT_50qs_seed42.jsonl',
-    #                                             model=gpt3p5)
-    # pp.pprint(results)
-    # print(acc_raw, acc_hay)
-
-    # num_needles = 10
-    # num_tokens_hay = 10000
-    # num_qs = 50
-    #
-    # acc_raw, acc_hay, results = run_needle_eval(num_needles=num_needles,
-    #                                             needle_func=code_needles,
-    #                                             num_tokens_hay=num_tokens_hay,
-    #                                             corpus=code,
-    #                                             num_qs=num_qs,
-    #                                             q_type='code',
-    #                                             out_fp='../progressive_needles/results/codeProgNeedles_gpt3p5_10needles_10kT_50qs_seed42.jsonl',
-    #                                             model=gpt3p5)
-    # pp.pprint(results)
-    # print(acc_raw, acc_hay)
+    run_fixed_question_evals(model=model, exp_list=exp_list, model_name=model_name, q_fp=q_fp, skip_until=22+9)   # skipped question index 21
 
 
 if __name__ == "__main__":
