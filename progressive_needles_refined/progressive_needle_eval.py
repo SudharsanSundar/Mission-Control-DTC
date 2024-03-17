@@ -344,6 +344,7 @@ def run_needle_eval_on_fixed_questions(
     skip_counter = 0
 
     questions = jsonl_to_list(q_fp)
+    print('TOTAL NUM qs:', len(questions))
     # ppr.pprint(questions[0])
     i = 0
 
@@ -385,9 +386,6 @@ def run_needle_eval_on_fixed_questions(
 
 
 def run_fixed_question_evals(model, out_fp, model_name, q_fp, skip_until=0):
-    # exp_detail: [num_needles, numtok_hay, haystack, needle_func, q_type, out_fp]
-    sum_results = []
-
     print('EXP DETAILS!', f'''
     out fp: {out_fp}, model_name: {model_name}, questions path (finetuning data!!!): q_fp
     ''')
@@ -405,20 +403,33 @@ def run_fixed_question_evals(model, out_fp, model_name, q_fp, skip_until=0):
 
 
 def main():
+    # os.chdir('/Users/sudharsansundar/Mission-Control-DTC/progressive_needles_refined')
+    print('current dir:', os.getcwd())
+
+    # Models
     mixtral54BIns = TogModel(model='mistralai/Mixtral-8x7B-Instruct-v0.1')
     mistral7B = TogModel(model='mistralai/Mistral-7B-Instruct-v0.2')
 
-    # TODO: Add your finetuned model
+    mixtralFT_numerical = TogModel(model='salman01@stanford.edu/Mixtral-8x7B-Instruct-v0.1-mixtral-finetune-numerical-needles-2024-03-16-18-40-02')
+    mixtralFT_code = TogModel(model='salman01@stanford.edu/Mixtral-8x7B-Instruct-v0.1-mixtral-finetune-code-needles-2024-03-16-22-55-16')
 
-    model_name = 'YOUR MODEL NAME'
-    model = mistral7B    # whatever mode you want
+    # Run params
+    model_name = 'mixtral8x7B'
+    model = mixtral54BIns
 
+    # For eval on numerical test data
     q_fp = './finetuning_data/numerical_needles_test.jsonl'  # Example: '../progressive_needles/results/numericalProgNeedles_mistral7B_4needles_17kT_50qs_seed42.jsonl'
-    # q_fp = './finetuning_data/code_needles_test.jsonl'     # Example: '../progressive_needles/results/numericalProgNeedles_mistral7B_4needles_17kT_50qs_seed42.jsonl'
-    # out_fp = './ft_data_eval/ADD_NAME.jsonl'   # Example: '../progressive_needles/results/numericalProgNeedles_mistral7B_4needles_17kT_50qs_seed42.jsonl'
-    out_fp = './test/AnotheTest.jsonl'
+    out_fp = f'./ft_data_eval/{model_name}_numerical_test_results.jsonl'  # Example: '../progressive_needles/results/numericalProgNeedles_mistral7B_4needles_17kT_50qs_seed42.jsonl'
 
+    # For eval on code test data
+    # q_fp = './finetuning_data/code_needles_test.jsonl'     # Example: '../progressive_needles/results/numericalProgNeedles_mistral7B_4needles_17kT_50qs_seed42.jsonl'
+    # out_fp = f'./ft_data_eval/{model_name}_code_test_results.jsonl'  # Example: '../progressive_needles/results/numericalProgNeedles_mistral7B_4needles_17kT_50qs_seed42.jsonl'
+
+    # out_fp = './test/AnotheTest.jsonl'
+
+    # Run eval
     result = run_fixed_question_evals(model=model, out_fp=out_fp, model_name=model_name, q_fp=q_fp)
+    print(result)
 
 
 if __name__ == "__main__":
