@@ -441,11 +441,11 @@ def run_refined_eval(eval_fp: str,
             eval_result[setting] = prompt
             eval_result[setting + '-model-ans'] = model_ans
             eval_result[setting + '-model-ans-num'] = model_ans_num
-            print(model_ans_num, setting, 'answer')
+            print(model_ans_num, setting, 'answer / last 10ish words:', ' '.join(model_ans.split(' ')[-10:]), '\n- - -')
 
         eval_result['correct-ans'] = correct_ans
         print(correct_ans, 'correct answer')
-        print('--------')
+        print('-----------')
 
         # Save result
         eval_results.append(eval_result)
@@ -536,6 +536,13 @@ TEMPLATE:
 
 EXAMPLE:
 > python progressive_needle_base_eval.py mistral7B numerical 2 needles-only-prompt,hay5k-prompt,hay10k-prompt 10
+
+python progressive_needle_base_eval.py mixtral8x7B numerical 2 needles-only-prompt,hay2k-prompt,hay7k-prompt,hay12k-prompt 75
+python progressive_needle_base_eval.py mixtral8x7B numerical 4 needles-only-prompt,hay2k-prompt,hay7k-prompt,hay12k-prompt 75
+
+python progressive_needle_base_eval.py mixtral8x7B code 2 needles-only-prompt,hay2k-prompt,hay7k-prompt,hay12k-prompt 75
+python progressive_needle_base_eval.py mixtral8x7B code 4 needles-only-prompt,hay2k-prompt,hay7k-prompt,hay12k-prompt 75
+
 '''
 if __name__ == "__main__":
     main()
