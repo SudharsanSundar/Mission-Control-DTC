@@ -6,6 +6,11 @@ import anthropic
 # from vertexai.preview.generative_models import GenerativeModel
 # import pathlib
 # import textwrap
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_random_exponential,
+)  # for exponential backoff
 
 # TODO: Delete before push!!! Add your own API key!!!
 
@@ -56,6 +61,7 @@ class TogModel:
         self.system_prompt = system_prompt
         self.max_tokens = max_tokens
 
+    @retry(wait=wait_random_exponential(min=1, max=60), stop=stop_after_attempt(6))
     def answer_txt(self, prompt: str) -> str:
         completion = togClient.chat.completions.create(
             model=self.model,
