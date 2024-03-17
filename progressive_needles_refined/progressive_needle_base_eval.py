@@ -8,6 +8,7 @@ import os
 import anthropic
 import time
 import sys
+import tqdm
 
 pp = ppr.PrettyPrinter(indent=4)
 # All modern models
@@ -101,9 +102,9 @@ def numerical_needles(num_needles):
 
         if i < num_needles - 1:
             if 'plus' in val:
-                needle = "The value of Needle " + str(i) + " is " + val + "the value of Needle " + str(i+1) + '.'
+                needle = "The value of Needle " + str(i) + " is " + val + "the value of Needle " + str(i + 1) + '.'
             elif 'minus' in val:
-                needle = "The value of Needle " + str(i) + " is " + "the value of Needle " + str(i+1) + val + '.'
+                needle = "The value of Needle " + str(i) + " is " + "the value of Needle " + str(i + 1) + val + '.'
         else:
             needle = "The value of Needle " + str(i) + " is " + val[0] + '.'
 
@@ -153,9 +154,11 @@ def code_needles(num_needles):
 
         if i < num_needles - 1:
             if 'plus' in val_num[1]:
-                needle = "\n\ndef get_value_of_needle_" + str(i) + "():\n\treturn get_value_of_needle_" + str(i + 1) + "() + " + str(val_num[0]) + "\n\n"
+                needle = "\n\ndef get_value_of_needle_" + str(i) + "():\n\treturn get_value_of_needle_" + str(
+                    i + 1) + "() + " + str(val_num[0]) + "\n\n"
             elif 'minus' in val_num[1]:
-                needle = "\n\ndef get_value_of_needle_" + str(i) + "():\n\treturn get_value_of_needle_" + str(i + 1) + "() - " + str(val_num[0]) + "\n\n"
+                needle = "\n\ndef get_value_of_needle_" + str(i) + "():\n\treturn get_value_of_needle_" + str(
+                    i + 1) + "() - " + str(val_num[0]) + "\n\n"
         else:
             needle = "\n\ndef get_value_of_needle_" + str(i) + "():\n\treturn " + str(val_num[0]) + "\n\n"
 
@@ -212,7 +215,8 @@ def create_only_code_needle_prompt(needles):
     engr = "Let's think step by step."
     needle_str = ''.join(needles) + '\n\n'
 
-    prompt = preamble + "Query: " + query + "Code:" + needle_str[1:] + "Again, please use the above code to correctly answer the following query: " + query + engr
+    prompt = preamble + "Query: " + query + "Code:" + needle_str[
+                                                      1:] + "Again, please use the above code to correctly answer the following query: " + query + engr
 
     return prompt
 
@@ -321,7 +325,8 @@ def run_needle_eval(num_needles: int,
         result = {'needles-only-ans': raw_ans,
                   'haystack-ans': hay_ans}
         pp.pprint(result)
-        print('correct:', ans, '| needles only:', raw_ans_num, '(total', num_right_raw,  ') | haystack: ', hay_ans_num, '(total', num_right_hay, ')')
+        print('correct:', ans, '| needles only:', raw_ans_num, '(total', num_right_raw, ') | haystack: ', hay_ans_num,
+              '(total', num_right_hay, ')')
 
         # Save eval results
         write_jsonl(out_fp, list_generator(eval_results))
@@ -329,14 +334,11 @@ def run_needle_eval(num_needles: int,
     return num_right_raw / num_qs, num_right_hay / num_qs, eval_results
 
 
-# # # # # # # # Only below is directly relevant to running eval on FINETUNING data!
-
-
 def run_needle_eval_on_fixed_questions(
-                                        out_fp: str,
-                                        model,
-                                        q_fp: str,
-                                        skip_until=0):
+        out_fp: str,
+        model,
+        q_fp: str,
+        skip_until=0):
     random.seed(42)
 
     eval_results = []
@@ -378,10 +380,11 @@ def run_needle_eval_on_fixed_questions(
             # Save eval results
             write_jsonl(out_fp, list_generator(eval_results))
             i += 1
-            print('correct:', ans, '| model answer:', model_ans_num, '(total', num_right_raw,  ', acc', num_right_raw / i, '), last few words:', ' '.join(model_ans.split(' ')[-10:]))
+            print('correct:', ans, '| model answer:', model_ans_num, '(total', num_right_raw, ', acc',
+                  num_right_raw / i, '), last few words:', ' '.join(model_ans.split(' ')[-10:]))
         except Exception as e:
             print('ERROR,', e, 'waiting 10 min')
-            time.sleep(601) # resume after waiting 10 min
+            time.sleep(601)  # resume after waiting 10 min
 
     return num_right_raw / len(questions), num_right_hay / len(questions), eval_results
 
@@ -392,10 +395,10 @@ def run_fixed_question_evals(model, out_fp, model_name, q_fp, skip_until=0):
     ''')
 
     result = run_needle_eval_on_fixed_questions(
-                                             out_fp=out_fp,
-                                             model=model,
-                                             q_fp=q_fp,
-                                             skip_until=skip_until)
+        out_fp=out_fp,
+        model=model,
+        q_fp=q_fp,
+        skip_until=skip_until)
 
     # pp.pprint(result[2])
     print('acc raw vs. hay', result[0], result[1])
@@ -403,45 +406,136 @@ def run_fixed_question_evals(model, out_fp, model_name, q_fp, skip_until=0):
     return result
 
 
+def run_refined_eval(eval_fp: str,
+                     num_qs: int,
+                     hay_amounts: list,  # needs to include 'needles-only'
+                     model,
+                     out_fp: str):
+    eval_file = jsonl_to_list(eval_fp)
+    eval_qs = eval_file[:num_qs]
+
+    if 'needles-only-prompt' not in hay_amounts:
+        raise Exception(
+            'Need to include \'needles-only\' setting in hay amounts, otherwise no baseline to compare to! comment out to override')
+
+    eval_results = []
+    num_right = {}
+    for q in tqdm.tqdm(eval_qs):
+        eval_result = {}
+        correct_ans = q['correct-ans']
+
+        for setting in hay_amounts:
+            # Get model answers
+            prompt = q[setting]
+            model_ans = model.answer_txt(prompt)
+            model_ans_num = extract_num(model_ans)
+
+            # Score answers
+            if type(model_ans_num) is int:
+                if setting in num_right:
+                    num_right[setting] += 1 if model_ans_num == correct_ans else 0
+                else:
+                    num_right[setting] = 1 if model_ans_num == correct_ans else 0
+
+            # Record model response
+            eval_result[setting] = prompt
+            eval_result[setting + '-model-ans'] = model_ans
+            eval_result[setting + '-model-ans-num'] = model_ans_num
+            print(model_ans_num, setting, 'answer')
+
+        eval_result['correct-ans'] = correct_ans
+        print(correct_ans, 'correct answer')
+        print('--------')
+
+        # Save result
+        eval_results.append(eval_result)
+
+    # Save all results to desired file
+    write_jsonl(out_fp, eval_results)
+
+    print('FINAL COUNTS:')
+    ppr.pprint(num_right)
+    print('ACCURACIES:')
+    for item in num_right.items():
+        print(item[0], item[1] / len(eval_qs))
+
+    return eval_results, num_right
+
+
 def main():
-    # os.chdir('/Users/sudharsansundar/Mission-Control-DTC/progressive_needles_refined')
-    print('current dir:', os.getcwd())
+    print('Current dir:', os.getcwd())
     args = sys.argv
 
     # Models
-    mixtral54BIns = TogModel(model='mistralai/Mixtral-8x7B-Instruct-v0.1')
+    mixtral8x7B = TogModel(model='mistralai/Mixtral-8x7B-Instruct-v0.1')
     mistral7B = TogModel(model='mistralai/Mistral-7B-Instruct-v0.2')
+    gpt3p5 = GPT(model='gpt-3.5-turbo-0125')
 
-    mixtralFT_numerical = TogModel(model='salman01@stanford.edu/Mixtral-8x7B-Instruct-v0.1-mixtral-finetune-numerical-needles-2024-03-16-18-40-02')
-    mixtralFT_code = TogModel(model='salman01@stanford.edu/Mixtral-8x7B-Instruct-v0.1-mixtral-finetune-code-needles-2024-03-16-22-55-16')
+    # TODO: add models
 
     # Model to eval
     if args[1] == 'mixtral8x7B':
         model_name = 'mixtral8x7B'
-        model = mixtral54BIns
-    elif args[1] == 'mixtralNumericalFT':
-        model_name = 'mixtralNumericalFT'
-        model = mixtralFT_numerical
-    elif args[1] == 'mixtralCodeFT':
-        model_name = 'mixtralCodeFT'
-        model = mixtralFT_code
+        model = mixtral8x7B
+    elif args[1] == 'gpt3.5':
+        model_name = 'gpt3.5'
+        model = gpt3p5
+    elif args[1] == 'mistral7B':
+        model_name = 'mistral7B'
+        model = mistral7B
     else:
-        raise Exception('Invalid model arg (arg index 1). Use predefined names')
+        raise Exception('Invalid model arg (arg index 1). Use predefined names, or add a name that you want')
 
-    # For eval on numerical test data
+    # For eval on numerical data
+    q_fp = None
+    out_fp = None
+    num_qs = int(args[5])
+    if args[3] not in ['2', '4']:
+        raise Exception(f'Haven\'t yet created eval data for {args[3]} needles!')
+
+    if num_qs > 100:
+        raise Exception(f'Haven\'t yet created more than 100 eval examples!')
+
     if args[2] == 'numerical':
-        q_fp = './finetuning_data/numerical_needles_test.jsonl'  # Example: '../progressive_needles/results/numericalProgNeedles_mistral7B_4needles_17kT_50qs_seed42.jsonl'
-        out_fp = f'./ft_data_eval/{model_name}_numerical_test_results.jsonl'  # Example: '../progressive_needles/results/numericalProgNeedles_mistral7B_4needles_17kT_50qs_seed42.jsonl'
+        if args[3] == '2':
+            q_fp = './evaluation_data/numerical_2needles_100qs.jsonl'
+            out_fp = f'./evaluation_results/{model_name}_numerical_2needles_results.jsonl'
+        elif args[3] == '4':
+            q_fp = './evaluation_data/numerical_4needles_100qs.jsonl'
+            out_fp = f'./evaluation_results/{model_name}_numerical_4needles_results.jsonl'
     elif args[2] == 'code':
-        # For eval on code test data
-        q_fp = './finetuning_data/code_needles_test.jsonl'     # Example: '../progressive_needles/results/numericalProgNeedles_mistral7B_4needles_17kT_50qs_seed42.jsonl'
-        out_fp = f'./ft_data_eval/{model_name}_code_test_results.jsonl'  # Example: '../progressive_needles/results/numericalProgNeedles_mistral7B_4needles_17kT_50qs_seed42.jsonl'
+        if args[3] == '2':
+            q_fp = './evaluation_data/code_2needles_100qs.jsonl'
+            out_fp = f'./evaluation_results/{model_name}_code_2needles_results.jsonl'
+        elif args[3] == '4':
+            q_fp = './evaluation_data/code_4needles_100qs.jsonl'
+            out_fp = f'./evaluation_results/{model_name}_code_4needles_results.jsonl'
     elif args[2] == 'test':
+        q_fp = './evaluation_data/numerical_2needles_100qs.jsonl'
         out_fp = './test/AnotheTest.jsonl'
 
+    # Specify all the hay settings you want to eval on. Should be formatted like this: needles-only-prompt,hay1k-prompt,hay10k-prompt,hay15k-prompt
+    hay_amounts = args[4].split(',')
+    if 'needles-only-prompt' not in hay_amounts:
+        raise Exception(
+            'Need to include \'needles-only\' setting in hay amounts, otherwise no baseline to compare to! comment out to override')
+
     # Run eval
-    result = run_fixed_question_evals(model=model, out_fp=out_fp, model_name=model_name, q_fp=q_fp)
+    # python progressive_needle_base_eval.py mistral7B numerical 2 needles-only-prompt,hay1k-prompt,hay2k-prompt 10
+    result, accs = run_refined_eval(eval_fp=q_fp,
+                                    num_qs=num_qs,
+                                    hay_amounts=hay_amounts,
+                                    model=model,
+                                    out_fp=out_fp)
 
 
+'''
+TEMPLATE:
+> cd progressive_needles_refined
+> python progressive_needle_base_eval.py model_name task_type num_needles needles-only-prompt,hay1k-prompt,hay2k-prompt,...,hay20k-prompt num_qs
+
+EXAMPLE:
+> python progressive_needle_base_eval.py mistral7B numerical 2 needles-only-prompt,hay5k-prompt,hay10k-prompt 10
+'''
 if __name__ == "__main__":
     main()

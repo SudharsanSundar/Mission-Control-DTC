@@ -31,7 +31,7 @@ class GPT:
     - system_prompt | system_prompt to use for model
     """
     def __init__(self,
-                 model="gpt-3.5-turbo",
+                 model="gpt-3.5-turbo-0125",
                  system_prompt="You are a helpful assistant."):
         self.model = model
         self.system_prompt = system_prompt

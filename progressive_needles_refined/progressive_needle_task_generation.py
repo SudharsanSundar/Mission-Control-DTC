@@ -292,7 +292,7 @@ def create_progressive_needles_eval_data(num_needles: int,
 
     eval_data = []
 
-    for i in range(num_qs):
+    for i in tqdm.tqdm(range(num_qs)):
         hay, hay_tok = None, 0
         eval_question = {}
         hay_tokens = {'needles-only-prompt': 0}
@@ -508,15 +508,35 @@ def main():
     # create_together_ft_data(ft_data=data, save_fp='finetuning_data/numerical_needleMax6_hayMax20k_1000qs.jsonl')
 
     results = create_progressive_needles_eval_data(num_needles=2,
-                                         needle_func=create_numerical_needles,
-                                         num_qs=2,
-                                         q_type='numerical',
-                                         out_fp='test/testEvalResults.jsonl',
-                                         hay_max_exclusive=4,
-                                         seed=42)
+                                                   needle_func=create_numerical_needles,
+                                                   num_qs=100,
+                                                   q_type='numerical',
+                                                   out_fp='evaluation_data/numerical_2needles_100qs.jsonl',
+                                                   hay_max_exclusive=21,
+                                                   seed=42)
+    results = create_progressive_needles_eval_data(num_needles=2,
+                                                   needle_func=create_code_needles,
+                                                   num_qs=100,
+                                                   q_type='code',
+                                                   out_fp='evaluation_data/code_2needles_100qs.jsonl',
+                                                   hay_max_exclusive=21,
+                                                   seed=42)
+    results = create_progressive_needles_eval_data(num_needles=4,
+                                                   needle_func=create_numerical_needles,
+                                                   num_qs=100,
+                                                   q_type='numerical',
+                                                   out_fp='evaluation_data/numerical_4needles_100qs.jsonl',
+                                                   hay_max_exclusive=21,
+                                                   seed=42)
+    results = create_progressive_needles_eval_data(num_needles=4,
+                                                   needle_func=create_code_needles,
+                                                   num_qs=100,
+                                                   q_type='code',
+                                                   out_fp='evaluation_data/code_4needles_100qs.jsonl',
+                                                   hay_max_exclusive=21,
+                                                   seed=42)
 
-    ppr.pprint(results)
-
+    # ppr.pprint(results)
 
 
 if __name__ == '__main__':
