@@ -391,7 +391,10 @@ def main():
     # mixtralAnsF = 'ft_data_eval/mixtral8x7B_code_test_results.jsonl'
     mixtralAnsF = 'ft_data_eval/mixtral8x7B_numerical_test_results.jsonl'
 
-    how_many_right(mixtralAnsF)
+    # how_many_right(mixtralAnsF)
+    eval_data = '/Users/sudharsansundar/Mission-Control-DTC/progressive_needles_refined/evaluation_data/code_2needles_100qs.jsonl'
+    file = jsonl_to_list(eval_data)
+    ppr.pprint(file[0])
 
 
 if __name__ == "__main__":

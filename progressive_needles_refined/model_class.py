@@ -14,7 +14,6 @@ from tenacity import (
 
 # TODO: Delete before push!!! Add your own API key!!!
 
-
 client = OpenAI(api_key=OAI_API_KEY)
 togClient = OpenAI(api_key=TOG_API_KEY, base_url='https://api.together.xyz')
 antClient = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)

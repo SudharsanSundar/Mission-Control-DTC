@@ -470,8 +470,7 @@ def main():
     mixtral8x7B = TogModel(model='mistralai/Mixtral-8x7B-Instruct-v0.1')
     mistral7B = TogModel(model='mistralai/Mistral-7B-Instruct-v0.2')
     gpt3p5 = GPT(model='gpt-3.5-turbo-0125')
-
-    # TODO: add models
+    gpt4 = GPT(model='gpt-4-0125-preview')
 
     # Model to eval
     if args[1] == 'mixtral8x7B':
@@ -483,6 +482,9 @@ def main():
     elif args[1] == 'mistral7B':
         model_name = 'mistral7B'
         model = mistral7B
+    elif args[1] == 'gpt4':
+        model_name = 'gpt4'
+        model = gpt4
     else:
         raise Exception('Invalid model arg (arg index 1). Use predefined names, or add a name that you want')
 
@@ -490,7 +492,7 @@ def main():
     q_fp = None
     out_fp = None
     num_qs = int(args[5])
-    if args[3] not in ['2', '4']:
+    if args[3] not in ['2', '4', '1']:
         raise Exception(f'Haven\'t yet created eval data for {args[3]} needles!')
 
     if num_qs > 100:
@@ -503,6 +505,9 @@ def main():
         elif args[3] == '4':
             q_fp = './evaluation_data/numerical_4needles_100qs.jsonl'
             out_fp = f'./evaluation_results/{model_name}_numerical_4needles_results.jsonl'
+        elif args[3] == '1':
+            q_fp = './evaluation_data/numerical_1needles_100qs.jsonl'
+            out_fp = f'./evaluation_results/{model_name}_numerical_1needles_results.jsonl'
     elif args[2] == 'code':
         if args[3] == '2':
             q_fp = './evaluation_data/code_2needles_100qs.jsonl'
@@ -510,6 +515,9 @@ def main():
         elif args[3] == '4':
             q_fp = './evaluation_data/code_4needles_100qs.jsonl'
             out_fp = f'./evaluation_results/{model_name}_code_4needles_results.jsonl'
+        elif args[3] == '1':
+            q_fp = './evaluation_data/code_1needles_100qs.jsonl'
+            out_fp = f'./evaluation_results/{model_name}_code_1needles_results.jsonl'
     elif args[2] == 'test':
         q_fp = './evaluation_data/numerical_2needles_100qs.jsonl'
         out_fp = './test/AnotheTest.jsonl'
@@ -539,9 +547,18 @@ EXAMPLE:
 
 python progressive_needle_base_eval.py mixtral8x7B numerical 2 needles-only-prompt,hay2k-prompt,hay7k-prompt,hay12k-prompt 75
 python progressive_needle_base_eval.py mixtral8x7B numerical 4 needles-only-prompt,hay2k-prompt,hay7k-prompt,hay12k-prompt 75
+python progressive_needle_base_eval.py mixtral8x7B numerical 1 needles-only-prompt,hay2k-prompt,hay7k-prompt,hay12k-prompt 75
 
 python progressive_needle_base_eval.py mixtral8x7B code 2 needles-only-prompt,hay2k-prompt,hay7k-prompt,hay12k-prompt 75
 python progressive_needle_base_eval.py mixtral8x7B code 4 needles-only-prompt,hay2k-prompt,hay7k-prompt,hay12k-prompt 75
+python progressive_needle_base_eval.py mixtral8x7B code 1 needles-only-prompt,hay2k-prompt,hay7k-prompt,hay12k-prompt 75
+
+
+
+python progressive_needle_base_eval.py gpt4 numerical 4 needles-only-prompt,hay20k-prompt 50
+python progressive_needle_base_eval.py gpt4 code 4 needles-only-prompt,hay20k-prompt 50
+
+
 
 '''
 if __name__ == "__main__":
